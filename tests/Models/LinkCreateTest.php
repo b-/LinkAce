@@ -2,11 +2,14 @@
 
 namespace Tests\Models;
 
+use App\Models\Link;
 use App\Models\User;
 use App\Repositories\LinkRepository;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class LinkCreateTest extends TestCase
@@ -63,5 +66,26 @@ class LinkCreateTest extends TestCase
         ];
 
         $this->assertDatabaseHas('links', $assertedData);
+    }
+
+    public function test_failed_link_creation_does_not_disable_checks(): void
+    {
+        Log::shouldReceive('warning')->once();
+
+        $this->be($this->user);
+
+        Http::fake(function () {
+            throw new ConnectionException('Connection refused');
+        });
+
+        $link = LinkRepository::create([
+            'url' => 'https://unreachable.example.com/',
+            'title' => null,
+            'description' => null,
+            'visibility' => 1,
+        ]);
+
+        $this->assertEquals(Link::STATUS_BROKEN, $link->status);
+        $this->assertFalse($link->fresh()->check_disabled);
     }
 }

@@ -20,7 +20,6 @@ COPY ./routes /app/routes
 COPY ./tests /app/tests
 
 COPY ["./artisan", "./composer.json", "./composer.lock", "/app/"]
-#COPY ./.env.example /app/.env
 
 # Install dependencies using Composer
 RUN composer install -n --prefer-dist --no-dev
@@ -43,10 +42,10 @@ FROM docker.io/library/node:22 AS npm_builder
 WORKDIR /srv
 
 COPY ./resources/assets ./resources/assets
-COPY ["./package.json", "./package-lock.json", "./webpack.mix.js", "/srv/"]
+COPY ["./package.json", "./package-lock.json", "./vite.config.js", "/srv/"]
 
-RUN npm install
-RUN npm run production
+RUN npm ci
+RUN npm run build
 
 # ================================
 # Prepare the final image
@@ -80,10 +79,8 @@ COPY --from=builder --chown=www-data:www-data /app/bootstrap/cache /app/bootstra
 # Publish backup language files
 COPY --from=builder --chown=www-data:www-data /app/vendor/spatie/laravel-backup/resources/lang /app/lang/vendor/backup
 
-# Copy files from the theme build
-COPY --from=npm_builder --chown=www-data:www-data /srv/public/assets/dist/js /app/public/assets/dist/js
-COPY --from=npm_builder --chown=www-data:www-data /srv/public/assets/dist/css /app/public/assets/dist/css
-COPY --from=npm_builder --chown=www-data:www-data /srv/public/mix-manifest.json /app/public/mix-manifest.json
+# Copy files from the asset build
+COPY --from=npm_builder --chown=www-data:www-data /srv/public/build /app/public/build
 
 # Create a SQLite database file ready to be used
 RUN touch ./database/database.sqlite \

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Kovah\HtmlMeta\Facades\HtmlMeta;
 use Kovah\HtmlMeta\HtmlMetaResult;
@@ -168,6 +169,7 @@ class LinkControllerTest extends TestCase
 
     public function test_store_with_connection_exception(): void
     {
+        Log::shouldReceive('warning')->once();
         Http::fake([
             'https://bad-example.com' => function () {
                 throw new ConnectionException('Unable to reach bad-example.com');
@@ -187,7 +189,7 @@ class LinkControllerTest extends TestCase
 
         $databaseLink = Link::first();
 
-        $this->assertTrue($databaseLink->check_disabled);
+        $this->assertFalse($databaseLink->check_disabled);
         $this->assertEquals(Link::STATUS_BROKEN, $databaseLink->status);
         $this->assertEquals('bad-example.com', $databaseLink->title);
     }
@@ -216,10 +218,14 @@ class LinkControllerTest extends TestCase
             '<meta property="og:image" content="' . $img . '">' .
             '</head></html>';
 
-        Http::fake(['huge-thumbnail.com' => Http::response($testHtml)]);
+        // example.com is used here (instead of a made-up domain) because it
+        // is reserved by RFC 2606 and always resolves via DNS;
+        // block_private_ips (enabled by default) now fails closed on hosts
+        // that cannot be resolved.
+        Http::fake(['example.com/huge-thumbnail' => Http::response($testHtml)]);
 
         $this->post('links', [
-            'url' => 'https://huge-thumbnail.com',
+            'url' => 'https://example.com/huge-thumbnail',
         ])->assertRedirect('links/1');
 
         $databaseLink = Link::first();
@@ -243,6 +249,10 @@ class LinkControllerTest extends TestCase
     {
         UserSettings::fake([
             'archive_backups_enabled' => false,
+        ]);
+
+        Http::fake([
+            'https://example.com' => Http::response('', 200),
         ]);
 
         $this->post('links', [
@@ -298,6 +308,11 @@ class LinkControllerTest extends TestCase
 
     public function test_store_request_for_private_ip(): void
     {
+        Log::shouldReceive('warning')->once();
+        Http::fake([
+            'http://104.102.37.33/research/cold_fusion.html' => Http::response('', 200),
+        ]);
+
         $this->post('links', [
             'url' => 'http://192.168.0.100/admin',
             'title' => null,
@@ -325,11 +340,29 @@ class LinkControllerTest extends TestCase
             'tags' => null,
             'visibility' => 1,
         ])->assertRedirect('links/2');
+    }
 
-        $this->assertDatabaseHas('links', [
-           'id' => 2,
-           'title' => 'Example Title',
-        ]);
+    public function test_store_request_does_not_leak_internal_service_response_via_meta(): void
+    {
+        // Regression test for GHSA-mf8j-5fhh-5cp3 (vector 1): saving a link that points
+        // to an internal-only service must not trigger a server-side metadata fetch.
+        // Http::preventStrayRequests() (enabled in setUp) makes any un-faked outbound
+        // request fail the test, proving no SSRF request is dispatched to the internal host.
+        Log::shouldReceive('warning')->once();
+
+        $this->post('links', [
+            'url' => 'http://10.0.0.1:9200/',
+            'title' => null,
+            'description' => null,
+            'lists' => null,
+            'tags' => null,
+            'visibility' => 1,
+        ])->assertRedirect('links/1');
+
+        $link = Link::first();
+        $this->assertEquals('http://10.0.0.1:9200/', $link->url);
+        // Title falls back to the host name instead of leaking fetched content from the internal service.
+        $this->assertEquals('10.0.0.1', $link->title);
     }
 
     public function test_validation_error_for_create(): void
@@ -383,7 +416,7 @@ class LinkControllerTest extends TestCase
         $this->createTestLinks();
 
         $this->get('links/1/edit')->assertOk()->assertSee('https://public-link.com');
-        $this->get('links/2/edit')->assertOk()->assertSee('https://internal-link.com');
+        $this->get('links/2/edit')->assertForbidden();
         $this->get('links/3/edit')->assertForbidden();
     }
 
@@ -427,7 +460,7 @@ class LinkControllerTest extends TestCase
             'tags' => null,
             'visibility' => 1,
             'check_disabled' => '0',
-        ])->assertRedirect('links/2');
+        ])->assertForbidden();
 
         $this->patch('links/3', [
             'url' => 'https://private-link.com',
@@ -438,6 +471,9 @@ class LinkControllerTest extends TestCase
             'visibility' => 1,
             'check_disabled' => '0',
         ])->assertForbidden();
+
+        $this->assertEquals('https://internal-link.com', Link::find(2)->url);
+        $this->assertEquals('https://private-link.com', Link::find(3)->url);
     }
 
     public function test_update_with_malicious_url(): void
@@ -537,7 +573,7 @@ class LinkControllerTest extends TestCase
         // Check other links
         $this->post('links/toggle-check/2', [
             'toggle' => '1',
-        ])->assertRedirect('links/2');
+        ])->assertForbidden();
 
         $this->post('links/toggle-check/3', ['toggle' => '1'])->assertForbidden();
     }
@@ -559,7 +595,7 @@ class LinkControllerTest extends TestCase
         $link = Link::first();
 
         $this->post('links/mark-working/1')->assertRedirect('links/1');
-        $this->post('links/mark-working/2')->assertRedirect('links/2');
+        $this->post('links/mark-working/2')->assertForbidden();
         $this->post('links/mark-working/3')->assertForbidden();
 
         $this->assertEquals(Link::STATUS_OK, $link->refresh()->status);

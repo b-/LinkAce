@@ -103,6 +103,7 @@ return [
         'en_US' => 'English',
 
         'ca_ES' => 'Català',
+        'cs_CZ' => 'Čeština',
         'de_DE' => 'Deutsch',
         'es_ES' => 'Español',
         'fr_FR' => 'Français',
@@ -116,6 +117,7 @@ return [
         'ro_RO' => 'Română',
         'ru_RU' => 'Русский',
         'sv_SE' => 'Svenska',
+        'uk_UA' => 'Українська',
         'vi_VN' => 'Tiếng Việt',
         'zh_CN' => '简体中文',
     ],
@@ -151,13 +153,28 @@ return [
     | Trusted Proxies
     |--------------------------------------------------------------------------
     |
-    | Specify which proxies should be trusted by default. As it's unknown which
-    | proxy ist used in front of LinkAce, all are allowed by default.
-    | Also see App\Http\Middleware\TrustProxies
+    | Specify which reverse proxies should be trusted. Leave null (the default)
+    | if LinkAce is accessed directly without a reverse proxy. Set to the proxy
+    | IP, a comma-separated list of IPs, or '*' to trust the immediate upstream
+    | connection. Also see App\Http\Middleware\TrustProxies
     |
     */
 
     'trusted_proxies' => env('TRUSTED_PROXIES', '*'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Hosts
+    |--------------------------------------------------------------------------
+    |
+    | Specify which host names should be trusted. Set the correct hostnames
+    | under which your LinkAce instance is running under here. By default,
+    | LinkAce will automatically detect the host from the given APP_URL.
+    | Either provide a comma-separated list of host names or a regex.
+    |
+    */
+
+    'trusted_hosts' => env('TRUSTED_HOSTS', null),
 
     /*
     |--------------------------------------------------------------------------

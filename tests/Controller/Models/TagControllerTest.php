@@ -197,7 +197,7 @@ class TagControllerTest extends TestCase
         $this->createTestTags();
 
         $this->get('tags/1/edit')->assertOk()->assertSee('Public Tag');
-        $this->get('tags/2/edit')->assertOk()->assertSee('Internal Tag');
+        $this->get('tags/2/edit')->assertForbidden();
         $this->get('tags/3/edit')->assertForbidden();
     }
 
@@ -224,13 +224,16 @@ class TagControllerTest extends TestCase
             'tag_id' => 2,
             'name' => 'New Internal Tag',
             'visibility' => 1,
-        ])->assertRedirect('tags/2');
+        ])->assertForbidden();
 
         $this->patch('tags/3', [
             'tag_id' => 3,
             'name' => 'New Private Tag',
             'visibility' => 1,
         ])->assertForbidden();
+
+        $this->assertEquals('Internal Tag', Tag::find(2)->name);
+        $this->assertEquals('Private Tag', Tag::find(3)->name);
     }
 
     public function test_missing_model_error_for_update(): void
@@ -293,5 +296,37 @@ class TagControllerTest extends TestCase
     public function test_missing_model_error_for_delete(): void
     {
         $this->delete('tags/1')->assertNotFound();
+    }
+
+    public function test_index_view_links_count_respects_visibility(): void
+    {
+        $otherUser = User::factory()->create();
+
+        $tagA = Tag::factory()->create([
+            'name' => 'ATag',
+            'user_id' => $this->user->id,
+        ]);
+
+        $tagB = Tag::factory()->create([
+            'name' => 'BTag',
+            'user_id' => $this->user->id,
+        ]);
+
+        Link::factory()->count(3)->create([
+            'user_id' => $otherUser->id,
+            'visibility' => ModelAttribute::VISIBILITY_PRIVATE,
+        ])->each(fn($link) => $link->tags()->attach([$tagA->id]));
+
+        Link::factory()->create([
+            'user_id' => $otherUser->id,
+            'visibility' => ModelAttribute::VISIBILITY_PUBLIC,
+        ])->tags()->attach([$tagB->id]);
+
+        $this->get('tags?orderBy=links_count&orderDir=desc')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'BTag',
+                'ATag',
+            ]);
     }
 }

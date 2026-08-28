@@ -39,7 +39,7 @@ class LinkController extends Controller
 
     public function store(LinkStoreRequest $request): JsonResponse
     {
-        $link = LinkRepository::create($request->all());
+        $link = LinkRepository::create($request->validated());
 
         return response()->json($link);
     }
@@ -60,7 +60,9 @@ class LinkController extends Controller
 
     public function update(LinkUpdateRequest $request, ApiLink $link): JsonResponse
     {
-        $updatedLink = LinkRepository::update($link, $request->all());
+        $this->authorize('update', $link);
+
+        $updatedLink = LinkRepository::update($link, $request->validated());
 
         return response()->json($updatedLink);
     }

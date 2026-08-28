@@ -11,18 +11,21 @@
     "composer/semver": "^3.3.1",
     "doctrine/dbal": "^3.7",
     "guzzlehttp/guzzle": "^7.0",
-    "kovah/laravel-html-meta": "^4.3",
-    "kovah/laravel-socialite-oidc": "^0.7",
+    "http-interop/http-factory-guzzle": "^1.2",
+    "kovah/laravel-html-meta": "^5.0.2",
+    "kovah/laravel-socialite-oidc": "^0.8",
     "laracasts/flash": "^3.1",
     "laravel/fortify": "^1.7",
     "laravel/framework": "^v11.48",
     "laravel/sanctum": "^v4.3",
+    "laravel/scout": "^11.1",
     "laravel/socialite": "^5.16",
     "league/csv": "^9.6",
     "league/flysystem-aws-s3-v3": "^3.0",
     "league/flysystem-ftp": "^3.0",
     "league/flysystem-sftp-v3": "^3.0",
     "masterminds/html5": "^2.8",
+    "meilisearch/meilisearch-php": "^1.16",
     "owen-it/laravel-auditing": "^14.0",
     "predis/predis": "^3.0",
     "rap2hpoutre/laravel-log-viewer": "^2.2",
@@ -41,17 +44,17 @@
     "spatie/laravel-permission": "^6.3.0",
     "spatie/laravel-settings": "^3.2.3",
     "symfony/http-client": "^6.0",
-    "symfony/mailgun-mailer": "^6.0"
+    "symfony/mailgun-mailer": "^6.0",
+    "typesense/typesense-php": "^6.0"
   },
   "require-dev": {
     "barryvdh/laravel-ide-helper": "^3.1",
     "fakerphp/faker": "^1.12",
     "fruitcake/laravel-debugbar": "^4.0",
-    "laravel/tinker": "^2.2",
+    "laravel/tinker": "^3.0",
     "mockery/mockery": "^1.3",
     "nunomaduro/collision": "^v8.8",
     "phpunit/phpunit": "^11.5",
-    "roave/security-advisories": "dev-latest",
     "spatie/laravel-ignition": "^2.4",
     "spatie/laravel-ray": "^1.39",
     "squizlabs/php_codesniffer": "^4.0"
@@ -85,7 +88,7 @@
   },
   "scripts": {
     "post-root-package-install": [
-      "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+      "@php -r \"file_exists('.env') || copy('.env.dev', '.env');\""
     ],
     "post-create-project-cmd": [
       "@php artisan key:generate --ansi"
@@ -103,6 +106,11 @@
     "sort-packages": true,
     "allow-plugins": {
       "php-http/discovery": true
+    },
+    "policy": {
+      "advisories": {
+        "block": false
+      }
     }
   },
   "minimum-stability": "stable",

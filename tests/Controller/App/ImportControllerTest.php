@@ -10,6 +10,7 @@ use App\Settings\UserSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -49,6 +50,27 @@ class ImportControllerTest extends TestCase
         Queue::assertPushed(ImportLinkJob::class, 5);
     }
 
+    public function test_import_rejects_javascript_url_scheme_bypass(): void
+    {
+        // Regression test for GHSA-7hg3-3jpp-gj7f: filter_var(FILTER_VALIDATE_URL)
+        // accepts "javascript://host/%0Apayload", unlike a naive "javascript:payload"
+        // URL, so it slips past the plain-scheme check that was previously in place.
+        Queue::fake();
+
+        $exampleData = file_get_contents(__DIR__ . '/data/import_xss_bypass.html');
+        $file = UploadedFile::fake()->createWithContent('import_xss_bypass.html', $exampleData);
+
+        $response = $this->post('import', ['import-file' => $file], ['Accept' => 'application/json']);
+
+        $response->assertOk()->assertJson(['success' => true]);
+
+        // Only the legitimate link may be queued; the javascript: URL must be skipped.
+        Queue::assertPushed(ImportLinkJob::class, 1);
+        Queue::assertPushed(ImportLinkJob::class, function (ImportLinkJob $job) {
+            return $job->link['url'] === 'https://astralapp.com/';
+        });
+    }
+
     public function test_queue_page(): void
     {
         $exampleData = file_get_contents(__DIR__ . '/data/import_example.html');
@@ -64,6 +86,30 @@ class ImportControllerTest extends TestCase
             'https://loader.io',
             'https://astralapp.com',
         ]);
+    }
+
+    public function test_queue_page_does_not_leak_other_users_imports(): void
+    {
+        // Regression test for GHSA-wmp4-4f5v-rwh8: /import/queue read the shared
+        // jobs/failed_jobs tables without any per-user scoping, exposing every
+        // user's in-progress import URLs to any authenticated user.
+        $exampleData = file_get_contents(__DIR__ . '/data/import_example.html');
+        $file = UploadedFile::fake()->createWithContent('import_example.html', $exampleData);
+
+        $this->post('import', ['import-file' => $file], ['Accept' => 'application/json'])
+            ->assertOk()->assertJson(['success' => true]);
+
+        $otherUser = User::factory()->create();
+        $this->actingAs($otherUser);
+
+        $response = $this->get('import/queue');
+
+        $response->assertOk();
+        $response->assertDontSee('https://medium.com/accelerated-intelligence');
+        $response->assertDontSee('https://adele.uxpin.com');
+        $response->assertDontSee('https://color.adobe.com/create/color-wheel');
+        $response->assertDontSee('https://loader.io');
+        $response->assertDontSee('https://astralapp.com');
     }
 
     public function test_link_import_job(): void
@@ -246,6 +292,31 @@ class ImportControllerTest extends TestCase
             'url' => 'https://example.com/linkace-import.html',
             'visibility' => 2,
         ]);
+    }
+
+    public function test_queue_page_shows_timestamps_in_user_timezone(): void
+    {
+        UserSettings::fake([
+            'timezone' => 'Europe/Prague',
+            'date_format' => 'Y-m-d',
+            'time_format' => 'H:i',
+        ]);
+        config(['app.timezone' => 'Europe/Prague']);
+
+        $exampleData = file_get_contents(__DIR__ . '/data/import_example.html');
+        $file = UploadedFile::fake()->createWithContent('import_example.html', $exampleData);
+
+        $response = $this->post('import', ['import-file' => $file], ['Accept' => 'application/json']);
+        $response->assertOk()->assertJson(['success' => true]);
+
+        $job = DB::table('jobs')->first();
+        $this->assertNotNull($job);
+
+        $expectedTime = Carbon::createFromTimestamp($job->available_at)
+            ->setTimezone('Europe/Prague')
+            ->format('Y-m-d H:i');
+
+        $this->get('import/queue')->assertSee($expectedTime);
     }
 
     public function test_link_import_without_date(): void

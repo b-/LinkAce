@@ -38,7 +38,7 @@ class ListController extends Controller
 
     public function store(ListStoreRequest $request): JsonResponse
     {
-        $link = ListRepository::create($request->all());
+        $link = ListRepository::create($request->validated());
 
         return response()->json($link);
     }
@@ -53,7 +53,9 @@ class ListController extends Controller
 
     public function update(ListUpdateRequest $request, ApiLinkList $list): JsonResponse
     {
-        $updatedList = ListRepository::update($list, $request->all());
+        $this->authorize('update', $list);
+
+        $updatedList = ListRepository::update($list, $request->validated());
 
         return response()->json($updatedList);
     }

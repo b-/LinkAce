@@ -38,7 +38,7 @@ class TagController extends Controller
 
     public function store(TagStoreRequest $request): JsonResponse
     {
-        $tag = TagRepository::create($request->all());
+        $tag = TagRepository::create($request->validated());
 
         return response()->json($tag);
     }
@@ -50,7 +50,9 @@ class TagController extends Controller
 
     public function update(TagUpdateRequest $request, ApiTag $tag): JsonResponse
     {
-        $updatedTag = TagRepository::update($tag, $request->all());
+        $this->authorize('update', $tag);
+
+        $updatedTag = TagRepository::update($tag, $request->validated());
 
         return response()->json($updatedTag);
     }

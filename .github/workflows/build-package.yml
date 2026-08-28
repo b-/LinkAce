@@ -11,17 +11,17 @@ jobs:
     name: Build final dist package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
       - name: Try to build the assets
         run: |
           npm ci
-          npm run production
+          npm run build
           rm -rf node_modules
 
       - uses: shivammathur/setup-php@v2
@@ -32,14 +32,14 @@ jobs:
       - id: composer-cache
         run: echo "::set-output name=dir::$(composer config cache-files-dir)"
 
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Prepare the environment
-        run: cp .env.example .env && touch database/database.sqlite
+        run: cp .env.local.production .env && touch database/database.sqlite
 
       - name: Validate composer.json and composer.lock
         run: composer validate
@@ -64,13 +64,14 @@ jobs:
         with:
           name: linkace-package
           retention-days: 7
+          include-hidden-files: true
           path: linkace.zip
 
   build-package-docker:
     name: Build final dist package for Docker setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Rename files
         run: |
@@ -82,6 +83,7 @@ jobs:
         with:
           name: linkace-docker
           retention-days: 7
+          include-hidden-files: true
           path: |
             docker-compose.yml
             .env
